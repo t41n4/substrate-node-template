@@ -22,6 +22,7 @@ use sp_std::prelude::*;
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
+use sp_runtime::traits::BlockNumberProvider;
 
 // A few exports that help ease life for downstream crates.
 pub use frame_support::{
@@ -38,6 +39,7 @@ pub use frame_support::{
 	},
 	StorageValue,
 };
+
 pub use frame_system::Call as SystemCall;
 pub use pallet_balances::Call as BalancesCall;
 pub use pallet_timestamp::Call as TimestampCall;
@@ -48,6 +50,8 @@ pub use sp_runtime::{Perbill, Permill};
 
 /// Import the template pallet.
 pub use pallet_template;
+pub use collectibles;
+pub use pallet_randomness_collective_flip;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -152,7 +156,8 @@ parameter_types! {
 
 // Configure FRAME pallets to include in runtime.
 
-impl frame_system::Config for Runtime {
+impl frame_system::Config for Runtime
+{
 	/// The basic call filter to use in dispatchable.
 	type BaseCallFilter = frame_support::traits::Everything;
 	/// The block type for the runtime.
@@ -274,18 +279,40 @@ impl pallet_template::Config for Runtime {
 	type WeightInfo = pallet_template::weights::SubstrateWeight<Runtime>;
 }
 
+impl BlockNumberProvider for Runtime {
+	type BlockNumber = BlockNumber;
+	
+	fn current_block_number() -> Self::BlockNumber {
+		System::block_number()
+	}
+	
+}
+
+impl pallet_randomness_collective_flip::Config for Runtime {
+}
+
+impl collectibles::Config for Runtime  {
+	type Currency = Balances;
+	type CollectionRandomness = RandomnessCollectiveFlip;
+	type RuntimeEvent = RuntimeEvent;
+	type MaximumOwned = frame_support::pallet_prelude::ConstU32<100>;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
-construct_runtime!(
-	pub struct Runtime {
+frame_system::construct_runtime!(
+	pub struct Runtime
+	{
 		System: frame_system,
 		Timestamp: pallet_timestamp,
 		Aura: pallet_aura,
 		Grandpa: pallet_grandpa,
 		Balances: pallet_balances,
+		RandomnessCollectiveFlip: pallet_randomness_collective_flip,
 		TransactionPayment: pallet_transaction_payment,
 		Sudo: pallet_sudo,
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template,
+		Collectibles: collectibles,
 	}
 );
 
