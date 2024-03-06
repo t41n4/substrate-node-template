@@ -299,7 +299,7 @@ impl collectibles::Config for Runtime  {
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
-frame_system::construct_runtime!(
+construct_runtime!(
 	pub struct Runtime
 	{
 		System: frame_system,
