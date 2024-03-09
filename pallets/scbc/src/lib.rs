@@ -96,19 +96,8 @@ pub mod pallet {
 				domain: "normal".as_bytes().to_vec(),
 				unique_id: Default::default(),
 			};
-			if !Ledger::<T>::contains_key(&phone_number) {
-				let new_phone_record = PhoneRecord {
-					trust_rating: [0; 16],
-					spam_transactions: vec![],
-					domain: "normal".as_bytes().to_vec(),
-					unique_id: Default::default(),
-				};
-				Ledger::<T>::insert(&phone_number, new_phone_record);
-				Self::deposit_event(Event::RegisterPhoneNumber { phone_number });
-			} else {
-				return Err(Error::<T>::PhoneNumberAlreadyRegistered.into());
-			}
-
+			Ledger::<T>::insert(phone_number.clone(), new_phone_record);
+			Self::deposit_event(Event::RegisterPhoneNumber { phone_number });
 			Ok(())
 		}
 
