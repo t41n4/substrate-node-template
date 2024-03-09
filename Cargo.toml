@@ -1,8 +1,7 @@
 [workspace]
 members = [
-    "node",
-    "pallets/collectibles",
-    "pallets/pallet-randomness-collective-flip",
+    "node",  
+    "pallets/scbc",
     "pallets/template",
     "runtime",
 ]

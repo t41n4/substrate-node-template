@@ -20,6 +20,7 @@ pub mod pallet {
 	}
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
+	
 	type BalanceOf<T> =
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
