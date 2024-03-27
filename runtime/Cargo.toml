@@ -54,6 +54,11 @@ frame-system-benchmarking = { version = "4.0.0-dev", default-features = false, g
 # Local Dependencies
 pallet-template = { version = "4.0.0-dev", default-features = false, path = "../pallets/template" }
 scbc = { path = "../pallets/scbc", default-features = false }
+
+pallet-insecure-randomness-collective-flip = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
+pallet-session = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
+validator-set = { version = "1.1.0", default-features = false, path = "../pallets/validator-set" }
+pallet-im-online = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
 # pallet-randomness-collective-flip = {default-features = false,path = "../pallets/pallet-randomness-collective-flip" }
 # collectibles = { default-features = false, path = "../pallets/collectibles" }
 #pallet-randomness-collective-flip = "15.0.0"
@@ -82,6 +87,7 @@ std = [
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
 	"pallet-transaction-payment/std",
+	'pallet-im-online/std',
 	"sp-api/std",
 	"sp-block-builder/std",
 	"sp-consensus-aura/std",
@@ -95,8 +101,10 @@ std = [
 	"sp-transaction-pool/std",
 	"sp-version/std",
 	"substrate-wasm-builder",
+	"validator-set/std",
+	"pallet-session/std",
 	# "collectibles/std"
-	"scbc/std"
+	"scbc/std",
 ]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",

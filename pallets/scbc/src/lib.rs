@@ -4,28 +4,59 @@
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/reference/frame-pallets/>
 pub use pallet::*;
+use pallet_timestamp::{self as timestamp};
 
 #[frame_support::pallet(dev_mode)]
 pub mod pallet {
 	use super::*;
-
 	use frame_support::{pallet_prelude::*, traits::Hash};
 	use frame_system::pallet_prelude::*;
+	use sp_core::H256;
 	use sp_std::prelude::*;
+	// use uuid::Uuid;
+	use frame_support::traits::Randomness;
 
 	type PhoneNumber = Vec<u8>;
 	type DomainType = Vec<u8>;
 	type TransactionHash = Vec<u8>;
 	type Timestamp = Vec<u8>;
+	type Reason = Vec<u8>;
+	type UniqueId = [u8; 16];
+	// type Timestamp = <T as pallet_timestamp::Config>::Moment;
+
+	type TrustRating = i8;
 
 	// Data Structures
 	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 	pub struct PhoneRecord {
-		trust_rating: [u8; 16],
-		spam_transactions: Vec<TransactionHash>,
+		trust_rating: TrustRating,
 		domain: DomainType,
-		unique_id: [u8; 16],
+		unique_id: UniqueId,
+		spam_records: Vec<SpamRecord>,
+		call_records: Vec<CallRecord>,
+		// spam_records: Vec<u8>,
+		// call_records: Vec<u8>,
 	}
+
+	// Data Structures
+	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+	pub struct SpamRecord {
+		timestamp: Timestamp,
+		reason: Reason,
+		unique_id: UniqueId,
+	}
+
+	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+	// Data Structures
+	pub struct CallRecord {
+		caller: PhoneNumber,
+		callee: PhoneNumber,
+		unique_id: UniqueId,
+		timestamp: Timestamp,
+	}
+
+	#[pallet::pallet]
+	pub struct Pallet<T>(_);
 
 	// Storage Items
 	#[pallet::storage]
@@ -34,26 +65,26 @@ pub mod pallet {
 		StorageMap<_, Blake2_128Concat, PhoneNumber, PhoneRecord, OptionQuery>;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
+
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + timestamp::Config {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+		// type MyRandomness: Randomness<H256, u32>;
+		type CollectionRandomness: Randomness<Self::Hash, BlockNumberFor<Self>>;
+		/// The overarching event type.
 		#[pallet::constant]
 		type MaximumOwned: Get<u32>;
 	}
 
-	#[pallet::pallet]
-	pub struct Pallet<T>(_);
-
 	// Events
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
-
 	pub enum Event<T: Config> {
 		RegisterPhoneNumber { phone_number: PhoneNumber },
 		RegiterDomain { domain: DomainType },
-		GetPhoneNumberDetails { unique_id: [u8; 16] },
-		GetDomainRating { domain: DomainType },
-		ReportSPAM { caller: T::AccountId, phone_number: PhoneNumber, timestamp: Timestamp },
+		ReportSPAM { spammee: PhoneNumber, spammer: PhoneNumber, reason: Reason },
+		MakeCall { caller: PhoneNumber, callee: PhoneNumber },
+		// GetDomainRating { domain: DomainType },
 		// Consider more events: TrustRatingChanged, SpamThresholdReached, etc.
 	}
 
@@ -80,6 +111,7 @@ pub mod pallet {
 	// // Dispatchable Calls (Extrinsics)
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		#[pallet::call_index(0)]
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
 		pub fn register_phone_number(
 			origin: OriginFor<T>,
@@ -90,90 +122,126 @@ pub mod pallet {
 				!Ledger::<T>::contains_key(phone_number.clone()),
 				Error::<T>::PhoneNumberAlreadyRegistered
 			);
+
+			let unique_id = Self::gen_unique_id();
+
 			let new_phone_record = PhoneRecord {
-				trust_rating: [0; 16],
-				spam_transactions: vec![],
+				trust_rating: 0,
 				domain: "normal".as_bytes().to_vec(),
-				unique_id: Default::default(),
+				unique_id,
+				spam_records: vec![],
+				call_records: vec![],
 			};
 			Ledger::<T>::insert(phone_number.clone(), new_phone_record);
 			Self::deposit_event(Event::RegisterPhoneNumber { phone_number });
 			Ok(())
 		}
 
+		#[pallet::call_index(1)]
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
-		pub fn get_phone_number_details(
-			origin: OriginFor<T>,
-			phone_number: PhoneNumber,
-		) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
-			let phone_record = Ledger::<T>::get(phone_number.clone())
-				.ok_or(Error::<T>::PhoneNumberNotRegistered)?;
-			Self::deposit_event(Event::GetPhoneNumberDetails { unique_id: phone_record.unique_id });
-			Ok(())
-		}
-
-		#[pallet::weight(0)]
 		pub fn report_spam(
 			origin: OriginFor<T>,
-			phone_number: PhoneNumber,
-			timestamp: Timestamp, // Assuming Timestamp type is defined
+			spammee: PhoneNumber,
+			spammer: PhoneNumber,
+			reason: Reason,
 		) -> DispatchResult {
 			// Ensure the caller is signed
 			let who = ensure_signed(origin)?;
 
 			// Get spam threshold (consider storing this as configurable parameter)
-			let spam_threshold: u8 = 50; // Example threshold
+			let spam_threshold: i8 = 50; // Example threshold
 
 			// Check if the phone number exists, otherwise register it automatically
-			if !Ledger::<T>::contains_key(&phone_number) {
-				let new_phone_record = PhoneRecord {
-					trust_rating: [0; 16],
-					spam_transactions: vec![],
-					domain: "normal".as_bytes().to_vec(),
-
-					unique_id: Default::default(),
-				};
-				Ledger::<T>::insert(&phone_number, new_phone_record);
-			}
+			Self::register_if_not_exists(spammee.clone());
 
 			// Fetch the existing phone record (guaranteed that it exists at this point)
-			let mut phone_record = Ledger::<T>::get(&phone_number).unwrap();
+			let mut phone_record = Ledger::<T>::get(&spammer).unwrap();
 
 			// Update the trust rating of the phone number
-			phone_record.trust_rating = Self::update_trust_rating(&phone_record.trust_rating, 10);
+			phone_record.trust_rating = Self::update_trust_rating(phone_record.trust_rating, 10);
 
-			// get the current transaction hash
-			let transaction_hash = <frame_system::Pallet<T>>::extrinsic_index();
-			let transaction_hash = transaction_hash.encode();
+			// Generate a unique ID for the spam record
+			let unique_id = Self::gen_unique_id();
+
+			let _now = <timestamp::Pallet<T>>::get();
+			let timestamp_bytes: Vec<u8> = _now.encode().to_vec();
+
+			// let reason_bytes = reason.encode().to_vec();
+
+			let new_spam_record =
+				SpamRecord { timestamp: timestamp_bytes, reason: reason.clone(), unique_id };
+
 			// Add the spam transaction to the record
-			phone_record.spam_transactions.push(transaction_hash);
+			phone_record.spam_records.push(new_spam_record);
 
 			// Check if the trust rating has fallen below the spam threshold
-			if phone_record.trust_rating.iter().sum::<u8>() > spam_threshold {
+			if phone_record.trust_rating >= spam_threshold {
 				// Change domain type to spam
 				phone_record.domain = Self::update_domain_type(&phone_record.domain, "spam");
 			}
 
 			// Update the ledger with the modified phone record information
-			Ledger::<T>::insert(&phone_number, phone_record);
+			Ledger::<T>::insert(&spammer, phone_record);
 
 			// Report spam event
-			Self::deposit_event(Event::ReportSPAM { caller: who, phone_number, timestamp });
+			Self::deposit_event(Event::ReportSPAM { spammee, spammer, reason });
 
 			Ok(())
 		}
-		// Helper function to update the trust rating (replace with your own logic)
+
+		#[pallet::call_index(3)]
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
+		pub fn make_call(
+			origin: OriginFor<T>,
+			caller: PhoneNumber,
+			callee: PhoneNumber,
+		) -> DispatchResult {
+			ensure_signed(origin)?;
+
+			// check if the callee phone number exists in the ledger else register it
+			Self::register_if_not_exists(callee.clone());
+
+			// get the phone record of the callee
+			let mut callee_phone_record = Ledger::<T>::get(&callee).unwrap();
+
+			// create a new call record
+			let _now = <timestamp::Pallet<T>>::get();
+			let timestamp: Vec<u8> = _now.encode().to_vec();
+			let unique_id = Self::gen_unique_id();
+			let new_call_record =
+				CallRecord { caller: caller.clone(), callee: callee.clone(), timestamp, unique_id };
+
+			// Add the call transaction to the record
+			callee_phone_record.call_records.push(new_call_record);
+
+			// Update the ledger with the modified phone record information
+			Ledger::<T>::insert(&callee, callee_phone_record);
+
+			// report spam event
+			Self::deposit_event(Event::MakeCall { caller, callee });
+
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
-		fn update_trust_rating(current_rating: &[u8; 16], adjustment: u8) -> [u8; 16] {
-			// Placeholder logic; replace with your own
-			let mut new_rating = current_rating.clone();
-			for i in 0..16 {
-				new_rating[i] = new_rating[i].saturating_add(adjustment);
+		fn register_if_not_exists(phone_number: PhoneNumber) {
+			if !Ledger::<T>::contains_key(&phone_number) {
+				let unique_id = Self::gen_unique_id();
+				let new_phone_record = PhoneRecord {
+					trust_rating: 0,
+					domain: "normal".as_bytes().to_vec(),
+					unique_id,
+					spam_records: vec![],
+					call_records: vec![],
+				};
+				Ledger::<T>::insert(&phone_number, new_phone_record);
 			}
+		}
 
+		fn update_trust_rating(current_rating: i8, adjustment: i8) -> i8 {
+			let mut new_rating = current_rating.clone();
+			new_rating += adjustment;
 			new_rating
 		}
 		fn update_domain_type(current_domain: &DomainType, new_type: &str) -> DomainType {
@@ -183,84 +251,27 @@ pub mod pallet {
 			new_domain.extend(new_type.as_bytes());
 			new_domain
 		}
+		fn gen_unique_id() -> ([u8; 16]) {
+			// Create randomness
+			let random = T::CollectionRandomness::random(&b"unique_id"[..]).0;
+
+			// Create randomness payload. Multiple collectibles can be generated in the same block,
+			// retaining uniqueness.
+			let unique_payload = (
+				random,
+				frame_system::Pallet::<T>::extrinsic_index().unwrap_or_default(),
+				frame_system::Pallet::<T>::block_number(),
+			);
+
+			// Turns into a byte array
+			let encoded_payload = unique_payload.encode();
+			let hash = frame_support::Hashable::blake2_128(&encoded_payload);
+
+			// Create a unique id
+			let mut unique_id = [0u8; 16];
+			unique_id.copy_from_slice(&hash.as_ref()[..16]);
+
+			unique_id
+		}
 	}
-
-	// #[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
-	// pub fn register_domain(origin: OriginFor<T>, domain: DomainType) -> DispatchResult {
-	// 	let who = ensure_signed(origin)?;
-	// 	ensure!(
-	// 		!Ledger::<T>::contains_key(domain.clone()),
-	// 		Error::<T>::DomainAlreadyRegistered
-	// 	);
-	// 	let new_phone_record = PhoneRecord {
-	// 		trust_rating: [0; 16],
-	// 		spam_transactions: vec![],
-	// 		// domain: vec![],
-	// 		unique_id: Default::default(),
-	// 	};
-	// 	Ledger::<T>::insert(domain.clone(), new_phone_record);
-	// 	Self::deposit_event(Event::RegiterDomain { domain });
-	// 	Ok(())
-	// }
-
-	// 	fn is_spam_threshold_reached(record: &PhoneRecord) -> bool {
-	// 		let spam_threshold = 5; // Placeholder value; adjust as needed
-	// 		record.spam_transactions.len() >= spam_threshold
-	// 	}
-
-	// 	fn get_transaction_hash() -> TransactionHash {
-	// 		<frame_system::Pallet<T>>::extrinsic().hash()
-	// 	}
-
-	// 	fn decrease_trust_rating(trust_rating: u32) -> u32 {
-	// 		let decrement_amount = 10; // Placeholder; you'll likely adjust or make this dynamic
-	// 		trust_rating.saturating_sub(decrement_amount)
-	// 	}
-
-	// 	#[pallet::call_index(1)]
-	// 	#[pallet::weight(T::WeightInfo::report_spam())]
-	// 	pub fn report_spam(
-	// 		origin: OriginFor<T>,
-	// 		phone_number: PhoneNumber,
-	// 		kind_of_spam: Vec<u8>,
-	// 	) -> DispatchResult {
-	// 		let reporter = ensure_signed(origin)?;
-	// 		let kind_of_spam = kind_of_spam.clone();
-	// 		let phone_number_clone = phone_number.clone();
-
-	// 		Ledger::<T>::mutate(phone_number_clone, |record| match record {
-	// 			Some(rec) => {
-	// 				// Update existing record:
-	// 				rec.trust_rating = Self::decrease_trust_rating(rec.trust_rating); // You'll implement this
-	// function 				rec.spam_transactions.push(Self::get_transaction_hash()); // Assuming this fetches
-	// the current transaction's hash
-
-	// 				if Self::is_spam_threshold_reached(rec) { // You'll define this
-	// 					 // Mark as spam (update PhoneRecord)
-	// 					 // Potentially emit an event
-	// 				}
-	// 			},
-	// 			None => todo!(),
-	// 		});
-
-	// 		Self::deposit_event(Event::SpamReported { phone_number, reporter });
-	// 		Ok(())
-	// 	}
-
-	// 	#[pallet::call_index(2)]
-	// 	#[pallet::weight(T::WeightInfo::report_spam())]
-	// 	pub fn register(origin: OriginFor<T>, phone_number: PhoneNumber) -> DispatchResult {
-	// 		let new_phone_record = PhoneRecord {
-	// 			trust_rating: 0,
-	// 			spam_transactions: vec![],
-	// 			domain: vec![],
-	// 			unique_id: Default::default(),
-	// 		};
-
-	// 		Ledger::<T>::insert(phone_number.clone(), new_phone_record);
-
-	// 		Self::deposit_event(Event::PhoneRecorded { phone_number });
-	// 		Ok(())
-	// 	}
-	// }
 }

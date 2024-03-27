@@ -14,12 +14,15 @@ use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{
 		AccountIdLookup, BlakeTwo256, Block as BlockT, BlockNumberProvider, IdentifyAccount,
-		NumberFor, One, Verify,
+		NumberFor, One, Verify, OpaqueKeys
 	},
 	transaction_validity::{TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, MultiSignature,
 };
+
+use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 use sp_std::prelude::*;
+use frame_system::EnsureRoot;
 
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
@@ -51,9 +54,9 @@ pub use sp_runtime::{Perbill, Permill};
 
 /// Import the template pallet.
 pub use pallet_template;
-pub use scbc;
+pub use validator_set ;
+// pub use scbc;
 // pub use collectibles;
-// pub use pallet_randomness_collective_flip;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -94,6 +97,7 @@ pub mod opaque {
 		pub struct SessionKeys {
 			pub aura: Aura,
 			pub grandpa: Grandpa,
+			pub im_online: ImOnline,
 		}
 	}
 }
@@ -154,6 +158,87 @@ parameter_types! {
 	pub BlockLength: frame_system::limits::BlockLength = frame_system::limits::BlockLength
 		::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
 	pub const SS58Prefix: u8 = 42;
+
+	pub const CouncilMotionDuration: BlockNumber = 3 * MINUTES;
+	pub const CouncilMaxProposals: u32 = 100;
+	pub const CouncilMaxMembers: u32 = 100;
+
+	pub const MinAuthorities: u32 = 2;
+
+	pub const Period: u32 = 2 * MINUTES;
+	pub const Offset: u32 = 0;
+
+	// From system config trait impl.
+	pub MaxCollectivesProposalWeight: Weight = Perbill::from_percent(50) * BlockWeights::get().max_block;
+
+	pub const ImOnlineUnsignedPriority: TransactionPriority = TransactionPriority::max_value();
+	pub const StakingUnsignedPriority: TransactionPriority = TransactionPriority::max_value() / 2;
+	pub const MaxAuthorities: u32 = 100;
+	pub const MaxKeys: u32 = 10_000;
+	pub const MaxPeerInHeartbeats: u32 = 10_000;
+	pub const MaxPeerDataEncodingSize: u32 = 1_000;
+}
+
+impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime
+where
+	RuntimeCall: From<LocalCall>,
+{
+	fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
+		call: RuntimeCall,
+		public: <Signature as Verify>::Signer,
+		account: AccountId,
+		nonce: Index,
+	) -> Option<(RuntimeCall, <UncheckedExtrinsic as Extrinsic>::SignaturePayload)> {
+		let period =
+			BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2) as u64;
+		let current_block = System::block_number().saturated_into::<u64>().saturating_sub(1);
+		let era = Era::mortal(period, current_block);
+		let extra = (
+			frame_system::CheckNonZeroSender::<Runtime>::new(),
+			frame_system::CheckSpecVersion::<Runtime>::new(),
+			frame_system::CheckTxVersion::<Runtime>::new(),
+			frame_system::CheckGenesis::<Runtime>::new(),
+			frame_system::CheckEra::<Runtime>::from(era),
+			frame_system::CheckNonce::<Runtime>::from(nonce),
+			frame_system::CheckWeight::<Runtime>::new(),
+			pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(0),
+		);
+		let raw_payload = SignedPayload::new(call, extra)
+			.map_err(|e| {
+				log::warn!("Unable to create signed payload: {:?}", e);
+			})
+			.ok()?;
+		let signature = raw_payload.using_encoded(|payload| C::sign(payload, public))?;
+		let address = account;
+		let (call, extra, _) = raw_payload.deconstruct();
+		Some((call, (sp_runtime::MultiAddress::Id(address), signature, extra)))
+	}
+}
+
+impl frame_system::offchain::SigningTypes for Runtime {
+	type Public = <Signature as Verify>::Signer;
+	type Signature = Signature;
+}
+
+impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
+where
+	RuntimeCall: From<C>,
+{
+	type Extrinsic = UncheckedExtrinsic;
+	type OverarchingCall = RuntimeCall;
+}
+
+impl pallet_im_online::Config for Runtime {
+	type AuthorityId = ImOnlineId;
+	type RuntimeEvent = RuntimeEvent;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type ValidatorSet = ValidatorSet;
+	type ReportUnresponsiveness = ValidatorSet;
+	type UnsignedPriority = ImOnlineUnsignedPriority;
+	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
+	type MaxKeys = MaxKeys;
+	type MaxPeerInHeartbeats = MaxPeerInHeartbeats;
+	type MaxPeerDataEncodingSize = MaxPeerDataEncodingSize;
 }
 
 // Configure FRAME pallets to include in runtime.
@@ -226,6 +311,32 @@ impl pallet_grandpa::Config for Runtime {
 	type EquivocationReportSystem = ();
 }
 
+
+impl pallet_insecure_randomness_collective_flip::Config for Runtime {}
+
+
+impl validator_set::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type MinAuthorities = MinAuthorities;
+	type AddRemoveOrigin = EnsureRoot<AccountId>;
+	// type WeightInfo = validator_set::weights::SubstrateWeight<Runtime>;
+	type WeightInfo = ();
+
+}
+
+impl pallet_session::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type ValidatorId = <Self as frame_system::Config>::AccountId;
+	type ValidatorIdOf = validator_set::ValidatorOf<Self>;
+	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type SessionManager = ValidatorSet;
+	type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
+	type Keys = opaque::SessionKeys;
+	type WeightInfo = ();
+}
+
+
 impl pallet_timestamp::Config for Runtime {
 	/// A timestamp: milliseconds since the unix epoch.
 	type Moment = u64;
@@ -288,19 +399,10 @@ impl BlockNumberProvider for Runtime {
 	}
 }
 
-// impl pallet_randomness_collective_flip::Config for Runtime {
-// }
-
-// impl collectibles::Config for Runtime  {
-// 	type Currency = Balances;
-// 	type CollectionRandomness = RandomnessCollectiveFlip;
-// 	type RuntimeEvent = RuntimeEvent;
-// 	type MaximumOwned = frame_support::pallet_prelude::ConstU32<100>;
-// }
-
 impl scbc::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type MaximumOwned = frame_support::pallet_prelude::ConstU32<100>;
+	type CollectionRandomness = RandomnessCollectiveFlip;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -308,15 +410,17 @@ construct_runtime!(
 	pub struct Runtime {
 		System: frame_system,
 		Timestamp: pallet_timestamp,
+		Balances: pallet_balances,
+		RandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
+		ValidatorSet: validator_set,
+		Session: pallet_session,
+		ImOnline: pallet_im_online,
 		Aura: pallet_aura,
 		Grandpa: pallet_grandpa,
-		Balances: pallet_balances,
-		TransactionPayment: pallet_transaction_payment,
 		Sudo: pallet_sudo,
+		TransactionPayment: pallet_transaction_payment,
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template,
-		// RandomnessCollectiveFlip: pallet_randomness_collective_flip,
-		// Collectibles: collectibles,
 		SCBC: scbc,
 	}
 );

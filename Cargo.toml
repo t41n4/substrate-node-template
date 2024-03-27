@@ -1,8 +1,9 @@
 [workspace]
 members = [
-    "node",  
+    "node",
     "pallets/scbc",
     "pallets/template",
+    "pallets/validator-set",
     "runtime",
 ]
 resolver = "2"
