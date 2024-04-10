@@ -117,7 +117,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			phone_number: PhoneNumber,
 		) -> DispatchResult {
-			let who = ensure_signed(origin)?;
+			// let who = ensure_signed(origin)?;
 			ensure!(
 				!Ledger::<T>::contains_key(phone_number.clone()),
 				Error::<T>::PhoneNumberAlreadyRegistered
@@ -146,7 +146,7 @@ pub mod pallet {
 			reason: Reason,
 		) -> DispatchResult {
 			// Ensure the caller is signed
-			let who = ensure_signed(origin)?;
+			// let who = ensure_signed(origin)?;
 
 			// Get spam threshold (consider storing this as configurable parameter)
 			let spam_threshold: i8 = 50; // Example threshold
@@ -196,7 +196,7 @@ pub mod pallet {
 			caller: PhoneNumber,
 			callee: PhoneNumber,
 		) -> DispatchResult {
-			ensure_signed(origin)?;
+			// ensure_signed(origin)?;
 
 			// check if the callee phone number exists in the ledger else register it
 			Self::register_if_not_exists(callee.clone());
