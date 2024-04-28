@@ -155,7 +155,7 @@ pub mod pallet {
 			Self::register_if_not_exists(spammee.clone());
 
 			// Fetch the existing phone record (guaranteed that it exists at this point)
-			let mut phone_record = Ledger::<T>::get(&spammer).unwrap();
+			let mut phone_record = Ledger::<T>::get(&spammer).unwrap_or_default();
 
 			// Update the trust rating of the phone number
 			phone_record.trust_rating = Self::update_trust_rating(phone_record.trust_rating, 10);
@@ -221,6 +221,18 @@ pub mod pallet {
 			Self::deposit_event(Event::MakeCall { caller, callee });
 
 			Ok(())
+		}
+	}
+
+	impl Default for PhoneRecord {
+		fn default() -> Self {
+			Self {
+				trust_rating: 0,
+				domain: "normal".as_bytes().to_vec(),
+				unique_id: [0u8; 16],
+				spam_records: vec![],
+				call_records: vec![],
+			}
 		}
 	}
 
