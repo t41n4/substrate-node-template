@@ -13,7 +13,8 @@ $DIR/target/release/node-template \
   --chain=local \
   --alice \
   --rpc-port 9944 \
+  --port 30333 \
   --node-key 0000000000000000000000000000000000000000000000000000000000000001 \
   --validator \
   --unsafe-rpc-external \
-  --rpc-cors all 
+  --rpc-cors all

@@ -6,9 +6,6 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
-
-use pallet_session::historical as pallet_session_historical;
-
 use pallet_grandpa::AuthorityId as GrandpaId;
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -16,7 +13,8 @@ use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{
-		AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, One, Verify, OpaqueKeys,
+		AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, One, OpaqueKeys,
+		Verify,
 	},
 	transaction_validity::{TransactionPriority, TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, MultiSignature,
@@ -31,16 +29,15 @@ use frame_system::{
 	EnsureRoot, EnsureRootWithSuccess, EnsureSigned, EnsureSignedBy, EnsureWithSuccess,
 };
 
-use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
-
 // A few exports that help ease life for downstream crates.
 pub use frame_support::{
-	construct_runtime, parameter_types,
+	construct_runtime,
 	dispatch::DispatchClass,
-	instances::{Instance1},
+	instances::Instance1,
+	parameter_types,
 	traits::{
-		ConstBool, ConstU128, ConstU32, ConstU64, ConstU16, ConstU8, KeyOwnerProofSystem, Randomness,
-		StorageInfo, EitherOfDiverse
+		ConstBool, ConstU128, ConstU16, ConstU32, ConstU64, ConstU8, EitherOfDiverse,
+		KeyOwnerProofSystem, Randomness, StorageInfo,
 	},
 	weights::{
 		constants::{
@@ -158,8 +155,6 @@ const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 /// We allow for 2 seconds of compute with a 6 second average block time, with maximum proof size.
 const MAXIMUM_BLOCK_WEIGHT: Weight =
 	Weight::from_parts(WEIGHT_REF_TIME_PER_SECOND.saturating_mul(2), u64::MAX);
-
-
 
 parameter_types! {
 	pub const BlockHashCount: BlockNumber = 2400;
@@ -331,7 +326,7 @@ parameter_types! {
 
 type CouncilCollective = pallet_collective::Instance1;
 impl pallet_collective::Config<CouncilCollective> for Runtime {
-// impl pallet_collective::Config for Runtime {
+	// impl pallet_collective::Config for Runtime {
 
 	type RuntimeOrigin = RuntimeOrigin;
 	type Proposal = RuntimeCall;
@@ -341,7 +336,7 @@ impl pallet_collective::Config<CouncilCollective> for Runtime {
 	type MaxMembers = CouncilMaxMembers;
 	type DefaultVote = pallet_collective::PrimeDefaultVote;
 	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
-	type SetMembersOrigin = EnsureRoot<Self::AccountId>;
+	type SetMembersOrigin = EnsureRoot<AccountId>;
 	type MaxProposalWeight = MaxCollectivesProposalWeight;
 }
 
@@ -349,7 +344,6 @@ type EnsureRootOrHalfCouncil = EitherOfDiverse<
 	EnsureRoot<AccountId>,
 	pallet_collective::EnsureProportionMoreThan<AccountId, CouncilCollective, 1, 2>,
 >;
-
 
 parameter_types! {
 	pub const ImOnlineUnsignedPriority: TransactionPriority = TransactionPriority::max_value();
@@ -359,31 +353,6 @@ parameter_types! {
 	pub const MaxKeys: u32 = 10_000;
 	pub const MaxPeerInHeartbeats: u32 = 10_000;
 }
-
-// impl frame_system::offchain::SigningTypes for Runtime {
-// 	type Public = <Signature as traits::Verify>::Signer;
-// 	type Signature = Signature;
-// }
-
-// impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
-// where
-// 	RuntimeCall: From<C>,385
-// {
-// 	type Extrinsic = UncheckedExtrinsic;
-// 	type OverarchingCall = RuntimeCall;
-// }
-
-// impl pallet_im_online::Config for Runtime {
-// 	type AuthorityId = ImOnlineId;
-// 	type RuntimeEvent = RuntimeEvent;
-// 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
-// 	type ValidatorSet = Historical;
-// 	type ReportUnresponsiveness = Offences;
-// 	type UnsignedPriority = ImOnlineUnsignedPriority;
-// 	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
-// 	type MaxKeys = MaxKeys;
-// 	type MaxPeerInHeartbeats = MaxPeerInHeartbeats;
-// }
 
 parameter_types! {
 	pub const MinAuthorities: u32 = 2;
@@ -401,7 +370,6 @@ parameter_types! {
 	pub const Offset: u32 = 0;
 }
 
-
 impl pallet_session::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
@@ -418,7 +386,6 @@ impl pallet_session::Config for Runtime {
 // 	type FullIdentification = pallet_staking::Exposure<AccountId, Balance>;
 // 	type FullIdentificationOf = pallet_staking::ExposureOf<Runtime>;
 // }
-
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
@@ -440,7 +407,6 @@ construct_runtime!(
 		// Include the custom logic from the pallet-template in the runtime.
 		Council: pallet_collective::<Instance1>,
 		// Council: pallet_collective,
-		
 		TemplateModule: pallet_template,
 		SCBC: scbc,
 	}

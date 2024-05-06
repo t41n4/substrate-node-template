@@ -9,16 +9,13 @@ use pallet_timestamp::{self as timestamp};
 #[frame_support::pallet(dev_mode)]
 pub mod pallet {
 	use super::*;
-	use frame_support::{pallet_prelude::*, traits::Hash};
+	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
-	use sp_core::H256;
 	use sp_std::prelude::*;
 	// use uuid::Uuid;
 	use frame_support::traits::Randomness;
-
 	type PhoneNumber = Vec<u8>;
-	type DomainType = Vec<u8>;
-	type TransactionHash = Vec<u8>;
+	type StatusType = Vec<u8>;
 	type Timestamp = Vec<u8>;
 	type Reason = Vec<u8>;
 	type UniqueId = [u8; 16];
@@ -26,16 +23,16 @@ pub mod pallet {
 
 	type TrustRating = i8;
 
+	const SPAM_THRESHOLD: i8 = 50;
+
 	// Data Structures
 	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 	pub struct PhoneRecord {
 		trust_rating: TrustRating,
-		domain: DomainType,
+		status: StatusType,
 		unique_id: UniqueId,
 		spam_records: Vec<SpamRecord>,
 		call_records: Vec<CallRecord>,
-		// spam_records: Vec<u8>,
-		// call_records: Vec<u8>,
 	}
 
 	// Data Structures
@@ -44,6 +41,7 @@ pub mod pallet {
 		timestamp: Timestamp,
 		reason: Reason,
 		unique_id: UniqueId,
+		who: PhoneNumber,
 	}
 
 	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
@@ -75,17 +73,17 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaximumOwned: Get<u32>;
 	}
-
 	// Events
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		RegisterPhoneNumber { phone_number: PhoneNumber },
-		RegiterDomain { domain: DomainType },
+		RegiterDomain { domain: StatusType },
 		ReportSPAM { spammee: PhoneNumber, spammer: PhoneNumber, reason: Reason },
 		MakeCall { caller: PhoneNumber, callee: PhoneNumber },
-		// GetDomainRating { domain: DomainType },
+		// GetDomainRating { domain: StatusType },
 		// Consider more events: TrustRatingChanged, SpamThresholdReached, etc.
+		MarkSpam { phone_number: PhoneNumber },
 	}
 
 	#[pallet::error]
@@ -106,6 +104,8 @@ pub mod pallet {
 		PhoneNumberSpam,
 		/// The domain is spam
 		DomainSpam,
+		/// The phone number is not reach threshold
+		PhoneNumberNotReachThreshold,
 	}
 
 	// // Dispatchable Calls (Extrinsics)
@@ -114,7 +114,7 @@ pub mod pallet {
 		#[pallet::call_index(0)]
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
 		pub fn register_phone_number(
-			origin: OriginFor<T>,
+			_origin: OriginFor<T>,
 			phone_number: PhoneNumber,
 		) -> DispatchResult {
 			// let who = ensure_signed(origin)?;
@@ -127,7 +127,7 @@ pub mod pallet {
 
 			let new_phone_record = PhoneRecord {
 				trust_rating: 0,
-				domain: "normal".as_bytes().to_vec(),
+				status: "normal".as_bytes().to_vec(),
 				unique_id,
 				spam_records: vec![],
 				call_records: vec![],
@@ -140,16 +140,13 @@ pub mod pallet {
 		#[pallet::call_index(1)]
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
 		pub fn report_spam(
-			origin: OriginFor<T>,
+			_origin: OriginFor<T>,
 			spammee: PhoneNumber,
 			spammer: PhoneNumber,
 			reason: Reason,
 		) -> DispatchResult {
 			// Ensure the caller is signed
 			// let who = ensure_signed(origin)?;
-
-			// Get spam threshold (consider storing this as configurable parameter)
-			let spam_threshold: i8 = 50; // Example threshold
 
 			// Check if the phone number exists, otherwise register it automatically
 			Self::register_if_not_exists(spammee.clone());
@@ -166,19 +163,15 @@ pub mod pallet {
 			let _now = <timestamp::Pallet<T>>::get();
 			let timestamp_bytes: Vec<u8> = _now.encode().to_vec();
 
-			// let reason_bytes = reason.encode().to_vec();
-
-			let new_spam_record =
-				SpamRecord { timestamp: timestamp_bytes, reason: reason.clone(), unique_id };
+			let new_spam_record = SpamRecord {
+				timestamp: timestamp_bytes,
+				reason: reason.clone(),
+				unique_id,
+				who: spammee.clone(),
+			};
 
 			// Add the spam transaction to the record
 			phone_record.spam_records.push(new_spam_record);
-
-			// Check if the trust rating has fallen below the spam threshold
-			if phone_record.trust_rating >= spam_threshold {
-				// Change domain type to spam
-				phone_record.domain = Self::update_domain_type(&phone_record.domain, "spam");
-			}
 
 			// Update the ledger with the modified phone record information
 			Ledger::<T>::insert(&spammer, phone_record);
@@ -189,10 +182,38 @@ pub mod pallet {
 			Ok(())
 		}
 
+		#[pallet::call_index(2)]
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
+		pub fn update_spam_status(_origin: OriginFor<T>, spammer: PhoneNumber) -> DispatchResult {
+			// Ensure the caller is signed
+			// let who = ensure_signed(origin)?;
+
+			let mut phone_record = Ledger::<T>::get(&spammer).unwrap();
+
+			// throw error if phone record not exist
+			if phone_record.spam_records.is_empty() {
+				Err(Error::<T>::PhoneNumberNotSpam)?;
+			}
+
+			let _now = <timestamp::Pallet<T>>::get();
+			let _timestamp_bytes: Vec<u8> = _now.encode().to_vec();
+			// Check if the trust rating has fallen below the spam threshold
+			if phone_record.trust_rating >= SPAM_THRESHOLD {
+				// Change domain type to spam
+				phone_record.status = Self::update_status(&phone_record.status, "spam");
+				// Report spam event
+				Self::deposit_event(Event::MarkSpam { phone_number: spammer });
+
+				Ok(())
+			} else {
+				Err(Error::<T>::PhoneNumberNotReachThreshold)?
+			}
+		}
+
 		#[pallet::call_index(3)]
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
 		pub fn make_call(
-			origin: OriginFor<T>,
+			_origin: OriginFor<T>,
 			caller: PhoneNumber,
 			callee: PhoneNumber,
 		) -> DispatchResult {
@@ -228,7 +249,7 @@ pub mod pallet {
 		fn default() -> Self {
 			Self {
 				trust_rating: 0,
-				domain: "normal".as_bytes().to_vec(),
+				status: "normal".as_bytes().to_vec(),
 				unique_id: [0u8; 16],
 				spam_records: vec![],
 				call_records: vec![],
@@ -242,7 +263,7 @@ pub mod pallet {
 				let unique_id = Self::gen_unique_id();
 				let new_phone_record = PhoneRecord {
 					trust_rating: 0,
-					domain: "normal".as_bytes().to_vec(),
+					status: "normal".as_bytes().to_vec(),
 					unique_id,
 					spam_records: vec![],
 					call_records: vec![],
@@ -256,14 +277,14 @@ pub mod pallet {
 			new_rating += adjustment;
 			new_rating
 		}
-		fn update_domain_type(current_domain: &DomainType, new_type: &str) -> DomainType {
+		fn update_status(current_domain: &StatusType, new_type: &str) -> StatusType {
 			// Placeholder logic; replace with your own
-			let mut new_domain = current_domain.clone();
-			new_domain.clear();
-			new_domain.extend(new_type.as_bytes());
-			new_domain
+			let mut new_status = current_domain.clone();
+			new_status.clear();
+			new_status.extend(new_type.as_bytes());
+			new_status
 		}
-		fn gen_unique_id() -> ([u8; 16]) {
+		fn gen_unique_id() -> UniqueId {
 			// Create randomness
 			let random = T::CollectionRandomness::random(&b"unique_id"[..]).0;
 
