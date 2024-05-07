@@ -220,42 +220,29 @@ pub mod pallet {
 			// ensure_signed(origin)?;
 
 			// check if the callee phone number exists in the ledger else register it
-			Self::register_if_not_exists(callee.clone());
 			Self::register_if_not_exists(caller.clone());
 
 			// get the phone record of the callee
-			let mut callee_phone_record = Ledger::<T>::get(&callee).unwrap();
-			let mut caller_phone_record = Ledger::<T>::get(&callee).unwrap();
+			let mut caller_phone_record = Ledger::<T>::get(&caller).unwrap();
 
 			// create a new call record
 			let _now = <timestamp::Pallet<T>>::get();
 			let timestamp: Vec<u8> = _now.encode().to_vec();
 			let unique_id = Self::gen_unique_id();
 
-			let callee_call_record = CallRecord {
+			let caller_call_record = CallRecord {
 				caller: caller.clone(),
 				callee: callee.clone(),
 				timestamp: timestamp.clone(),
 				unique_id,
 			};
 
-			let caller_call_record = CallRecord {
-				caller: callee.clone(),
-				callee: caller.clone(),
-				timestamp: timestamp.clone(),
-				unique_id,
-			};
-
-			// Add the call transaction to the record
-			callee_phone_record.call_records.push(callee_call_record);
-			caller_phone_record.call_records.push(caller_call_record);
+			caller_phone_record.call_records.push(caller_call_record.clone());
 
 			// Update the ledger with the modified phone record information
-			Ledger::<T>::insert(&callee, callee_phone_record);
 			Ledger::<T>::insert(&caller, caller_phone_record);
 
 			Self::deposit_event(Event::MakeCall { caller: caller.clone(), callee: callee.clone() });
-			Self::deposit_event(Event::MakeCall { caller: callee.clone(), callee: caller.clone() });
 
 			Ok(())
 		}
