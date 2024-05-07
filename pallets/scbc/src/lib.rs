@@ -254,8 +254,8 @@ pub mod pallet {
 			Ledger::<T>::insert(&callee, callee_phone_record);
 			Ledger::<T>::insert(&caller, caller_phone_record);
 
-			// report spam event
-			Self::deposit_event(Event::MakeCall { caller, callee });
+			Self::deposit_event(Event::MakeCall { caller: caller.clone(), callee: callee.clone() });
+			Self::deposit_event(Event::MakeCall { caller: callee.clone(), callee: caller.clone() });
 
 			Ok(())
 		}
