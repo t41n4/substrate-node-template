@@ -23,7 +23,7 @@ pub mod pallet {
 
 	type TrustRating = i8;
 
-	const SPAM_THRESHOLD: i8 = 50;
+	const SPAM_THRESHOLD: i8 = -50;
 
 	// Data Structures
 	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
@@ -81,9 +81,7 @@ pub mod pallet {
 		RegiterDomain { domain: StatusType },
 		ReportSPAM { spammee: PhoneNumber, spammer: PhoneNumber, reason: Reason },
 		MakeCall { caller: PhoneNumber, callee: PhoneNumber },
-		// GetDomainRating { domain: StatusType },
-		// Consider more events: TrustRatingChanged, SpamThresholdReached, etc.
-		MarkSpam { phone_number: PhoneNumber },
+		MarkSpam { phone_number: PhoneNumber, metadata: Vec<u8> },
 	}
 
 	#[pallet::error]
@@ -155,7 +153,7 @@ pub mod pallet {
 			let mut phone_record = Ledger::<T>::get(&spammer).unwrap_or_default();
 
 			// Update the trust rating of the phone number
-			phone_record.trust_rating = Self::update_trust_rating(phone_record.trust_rating, 10);
+			phone_record.trust_rating = Self::update_trust_rating(phone_record.trust_rating, -10);
 
 			// Generate a unique ID for the spam record
 			let unique_id = Self::gen_unique_id();
@@ -175,7 +173,6 @@ pub mod pallet {
 
 			// Update the ledger with the modified phone record information
 			Ledger::<T>::insert(&spammer, phone_record);
-
 			// Report spam event
 			Self::deposit_event(Event::ReportSPAM { spammee, spammer, reason });
 
@@ -184,7 +181,11 @@ pub mod pallet {
 
 		#[pallet::call_index(2)]
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
-		pub fn update_spam_status(_origin: OriginFor<T>, spammer: PhoneNumber) -> DispatchResult {
+		pub fn update_spam_status(
+			_origin: OriginFor<T>,
+			spammer: PhoneNumber,
+			metadata: Vec<u8>,
+		) -> DispatchResult {
 			// Ensure the caller is signed
 			// let who = ensure_signed(origin)?;
 
@@ -198,11 +199,11 @@ pub mod pallet {
 			let _now = <timestamp::Pallet<T>>::get();
 			let _timestamp_bytes: Vec<u8> = _now.encode().to_vec();
 			// Check if the trust rating has fallen below the spam threshold
-			if phone_record.trust_rating >= SPAM_THRESHOLD {
+			if phone_record.trust_rating < SPAM_THRESHOLD {
 				// Change domain type to spam
 				phone_record.status = Self::update_status(&phone_record.status, "spam");
 				// Report spam event
-				Self::deposit_event(Event::MarkSpam { phone_number: spammer });
+				Self::deposit_event(Event::MarkSpam { phone_number: spammer, metadata });
 
 				Ok(())
 			} else {

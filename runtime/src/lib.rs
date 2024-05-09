@@ -26,7 +26,7 @@ use sp_version::RuntimeVersion;
 
 use frame_system::{
 	limits::{BlockLength, BlockWeights},
-	EnsureRoot, EnsureRootWithSuccess, EnsureSigned, EnsureSignedBy, EnsureWithSuccess,
+	EnsureRoot,
 };
 
 // A few exports that help ease life for downstream crates.
@@ -326,8 +326,6 @@ parameter_types! {
 
 type CouncilCollective = pallet_collective::Instance1;
 impl pallet_collective::Config<CouncilCollective> for Runtime {
-	// impl pallet_collective::Config for Runtime {
-
 	type RuntimeOrigin = RuntimeOrigin;
 	type Proposal = RuntimeCall;
 	type RuntimeEvent = RuntimeEvent;
