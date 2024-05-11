@@ -199,12 +199,11 @@ pub mod pallet {
 			let _now = <timestamp::Pallet<T>>::get();
 			let _timestamp_bytes: Vec<u8> = _now.encode().to_vec();
 			// Check if the trust rating has fallen below the spam threshold
-			if phone_record.trust_rating < SPAM_THRESHOLD {
+			if phone_record.trust_rating <= SPAM_THRESHOLD {
 				// Change domain type to spam
 				phone_record.status = Self::update_status(&phone_record.status, "spam");
 				// Report spam event
 				Self::deposit_event(Event::MarkSpam { phone_number: spammer, metadata });
-
 				Ok(())
 			} else {
 				Err(Error::<T>::PhoneNumberNotReachThreshold)?
