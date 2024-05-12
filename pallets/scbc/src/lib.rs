@@ -72,6 +72,7 @@ pub mod pallet {
 		/// The overarching event type.
 		#[pallet::constant]
 		type MaximumOwned: Get<u32>;
+		type ThresholdSpam: Get<i8>;
 	}
 	// Events
 	#[pallet::event]
