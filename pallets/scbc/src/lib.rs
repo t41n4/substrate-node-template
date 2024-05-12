@@ -99,7 +99,7 @@ pub mod pallet {
 		/// The domain is not spam
 		DomainNotSpam,
 		/// The phone number is spam
-		PhoneNumberSpam,
+		PhoneNumberAlreadySpam,
 		/// The domain is spam
 		DomainSpam,
 		/// The phone number is not reach threshold
@@ -193,18 +193,24 @@ pub mod pallet {
 
 			// throw error if phone record not exist
 			if phone_record.spam_records.is_empty() {
+				phone_record.status = Self::update_status(&phone_record.status, "normal");
 				Err(Error::<T>::PhoneNumberNotSpam)?;
 			}
 
 			let _now = <timestamp::Pallet<T>>::get();
 			let _timestamp_bytes: Vec<u8> = _now.encode().to_vec();
+			let status = phone_record.status.clone();
 			// Check if the trust rating has fallen below the spam threshold
 			if phone_record.trust_rating <= SPAM_THRESHOLD {
 				// Change domain type to spam
-				phone_record.status = Self::update_status(&phone_record.status, "spam");
-				// Report spam event
-				Self::deposit_event(Event::MarkSpam { phone_number: spammer, metadata });
-				Ok(())
+				if status == "spam".as_bytes().to_vec() {
+					Err(Error::<T>::PhoneNumberAlreadySpam)?
+				} else {
+					phone_record.status = Self::update_status(&phone_record.status, "spam");
+					// Report spam event
+					Self::deposit_event(Event::MarkSpam { phone_number: spammer, metadata });
+					Ok(())
+				}
 			} else {
 				Err(Error::<T>::PhoneNumberNotReachThreshold)?
 			}
