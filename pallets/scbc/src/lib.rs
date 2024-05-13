@@ -209,7 +209,9 @@ pub mod pallet {
 					Err(Error::<T>::PhoneNumberAlreadySpam)?
 				} else {
 					phone_record.status = Self::update_status(&phone_record.status, "spam");
-					// Report spam event
+					// Update the ledger with the modified phone record information
+					Ledger::<T>::insert(&spammer, phone_record);
+
 					Self::deposit_event(Event::MarkSpam { phone_number: spammer, metadata });
 					Ok(())
 				}
