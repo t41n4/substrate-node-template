@@ -4,6 +4,7 @@ members = [
     "pallets/scbc",
     "pallets/template",
     "pallets/validator-set",
+    "pallets/zk-snarks",
     "runtime",
 ]
 resolver = "2"

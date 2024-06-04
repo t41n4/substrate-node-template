@@ -60,6 +60,9 @@ pub use sp_runtime::{Perbill, Permill};
 pub use pallet_template;
 pub use scbc;
 
+/// Import the zk-snarks pallet.
+pub use pallet_zk_snarks;
+
 /// An index to a block.
 pub type BlockNumber = u32;
 
@@ -339,6 +342,15 @@ impl pallet_collective::Config<CouncilCollective> for Runtime {
 	type MaxProposalWeight = MaxCollectivesProposalWeight;
 }
 
+/// Configure the pallet-template in pallets/zk-snarks.
+impl pallet_zk_snarks::Config for Runtime {
+	type MaxPublicInputsLength = ConstU32<9>;
+	type MaxProofLength = ConstU32<1115>;
+	type MaxVerificationKeyLength = ConstU32<4079>;
+	type RuntimeEvent = RuntimeEvent;
+	type WeightInfo = pallet_zk_snarks::weights::SubstrateWeight<Runtime>;
+}
+
 type EnsureRootOrHalfCouncil = EitherOfDiverse<
 	EnsureRoot<AccountId>,
 	pallet_collective::EnsureProportionMoreThan<AccountId, CouncilCollective, 1, 2>,
@@ -408,6 +420,8 @@ construct_runtime!(
 		// Council: pallet_collective,
 		TemplateModule: pallet_template,
 		SCBC: scbc,
+		ZKSnarks: pallet_zk_snarks,
+
 	}
 );
 
@@ -455,7 +469,9 @@ mod benches {
 		[pallet_balances, Balances]
 		[pallet_timestamp, Timestamp]
 		[pallet_sudo, Sudo]
-		[pallet_template, TemplateModule]
+		[pallet_template, TemplateModule],
+		[pallet_zk_snarks, ZKSnarks]
+
 	);
 }
 
