@@ -13,3 +13,9 @@
 customSpec.json
 customSpecRaw.json
 localSpec-validator.json
+*.ptau
+*.zkey
+
+
+circom/build/task_js/task.wasm
+circom/build/task_js/witness.wtns
